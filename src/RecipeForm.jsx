@@ -6,47 +6,57 @@ function RecipeForm({ onSave, initialData }) {
   const [ingredients, setIngredients] = useState([])
   const [selectedIngredient, setSelectedIngredient] = useState(null)
   const [grams, setGrams] = useState('')
+  const [ingredientKey, setIngredientKey] = useState(0)
 
   useEffect(() => {
     if (initialData) {
       setName(initialData.name)
       setIngredients(initialData.ingredients)
+    } else {
+      setName('')
+      setIngredients([])
     }
   }, [initialData])
-
-  const handleSubmit = () => {
-    const total = ingredients.reduce(
-      (acc, ing) => {
-        const multiplier = ing.grams / 100
-        acc.calories += (ing.calories || 0) * multiplier
-        acc.protein += (ing.protein || 0) * multiplier
-        acc.carbs += (ing.carbs || 0) * multiplier
-        acc.fat += (ing.fat || 0) * multiplier
-        return acc
-      },
-      { calories: 0, protein: 0, carbs: 0, fat: 0 }
-    )
-
-    onSave({ name, ingredients, total })
-  }
 
   const handleAddIngredient = () => {
     if (!selectedIngredient || !grams) return
 
-    setIngredients([
-      ...ingredients,
+    setIngredients(prev => [
+      ...prev,
       {
-        name: selectedIngredient.product_name || selectedIngredient.name,
+        name: selectedIngredient.name,
+        id: selectedIngredient.id || selectedIngredient._id || Date.now(),
         grams: parseFloat(grams),
-        calories: selectedIngredient.nutriments?.energy_kcal || 0,
-        protein: selectedIngredient.nutriments?.proteins || 0,
-        carbs: selectedIngredient.nutriments?.carbohydrates || 0,
-        fat: selectedIngredient.nutriments?.fat || 0
-      }
+      },
     ])
 
     setSelectedIngredient(null)
     setGrams('')
+    setIngredientKey(prev => prev + 1) // 🔄 Force IngredientSearch remount
+  }
+
+  const handleSubmit = async () => {
+    let total = { calories: 0, protein: 0, carbs: 0, fat: 0 }
+
+    for (let ing of ingredients) {
+      try {
+        const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${ing.id}.json`)
+        const data = await res.json()
+
+        const nutrients = data.product?.nutriments
+        if (!nutrients) continue
+
+        const multiplier = ing.grams / 100
+        total.calories += (nutrients['energy-kcal_100g'] || 0) * multiplier
+        total.protein += (nutrients.proteins_100g || 0) * multiplier
+        total.carbs += (nutrients.carbohydrates_100g || 0) * multiplier
+        total.fat += (nutrients.fat_100g || 0) * multiplier
+      } catch (e) {
+        console.warn('Ingredient fetch failed', ing.name)
+      }
+    }
+
+    onSave({ name, ingredients, total })
   }
 
   return (
@@ -58,32 +68,37 @@ function RecipeForm({ onSave, initialData }) {
         placeholder="Recipe Name"
       />
 
-      <div className="mb-2">
-        <IngredientSearch onSelect={setSelectedIngredient} />
+      <div className="flex gap-2 mb-2 items-center">
+        <div className="flex-1">
+          <IngredientSearch key={ingredientKey} onSelect={setSelectedIngredient} />
+        </div>
+        <input
+          className="border p-2 w-24"
+          value={grams}
+          type="number"
+          onChange={(e) => setGrams(e.target.value)}
+          placeholder="Grams"
+        />
+        <button
+          className="bg-blue-500 text-white px-4 py-2 rounded"
+          onClick={handleAddIngredient}
+        >
+          Add
+        </button>
       </div>
 
-      {selectedIngredient && (
-        <div className="flex gap-2 mb-2">
-          <input
-            className="border p-2 w-24"
-            value={grams}
-            type="number"
-            onChange={(e) => setGrams(e.target.value)}
-            placeholder="Grams"
-          />
-          <button className="bg-blue-500 text-white px-4" onClick={handleAddIngredient}>
-            Add
-          </button>
-        </div>
-      )}
-
-      <ul className="mb-2 list-disc pl-5">
+      <ul className="mb-2 list-disc pl-5 text-sm">
         {ingredients.map((ing, idx) => (
-          <li key={idx}>{ing.grams}g of {ing.name}</li>
+          <li key={idx}>
+            {ing.grams}g of {ing.name}
+          </li>
         ))}
       </ul>
 
-      <button className="bg-green-600 text-white px-4 py-2" onClick={handleSubmit}>
+      <button
+        className="bg-green-600 text-white px-4 py-2 rounded"
+        onClick={handleSubmit}
+      >
         Save Recipe
       </button>
     </div>
