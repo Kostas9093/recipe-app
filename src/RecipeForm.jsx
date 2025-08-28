@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import IngredientSearch from './IngredientSearch'
+import { NUTRITION_DB } from './NutritionDB'
 
 function RecipeForm({ onSave, initialData }) {
   const [name, setName] = useState('')
@@ -25,7 +26,6 @@ function RecipeForm({ onSave, initialData }) {
       ...prev,
       {
         name: selectedIngredient.name,
-        id: selectedIngredient.id || selectedIngredient._id || Date.now(),
         grams: parseFloat(grams),
       },
     ])
@@ -35,26 +35,29 @@ function RecipeForm({ onSave, initialData }) {
     setIngredientKey(prev => prev + 1) // 🔄 Force IngredientSearch remount
   }
 
-  const handleSubmit = async () => {
+  const handleSubmit = () => {
     let total = { calories: 0, protein: 0, carbs: 0, fat: 0 }
 
     for (let ing of ingredients) {
-      try {
-        const res = await fetch(`https://world.openfoodfacts.org/api/v0/product/${ing.id}.json`)
-        const data = await res.json()
+      const nutri = NUTRITION_DB[ing.name.toLowerCase()]
+      if (!nutri) continue
 
-        const nutrients = data.product?.nutriments
-        if (!nutrients) continue
-
-        const multiplier = ing.grams / 100
-        total.calories += (nutrients['energy-kcal_100g'] || 0) * multiplier
-        total.protein += (nutrients.proteins_100g || 0) * multiplier
-        total.carbs += (nutrients.carbohydrates_100g || 0) * multiplier
-        total.fat += (nutrients.fat_100g || 0) * multiplier
-      } catch (e) {
-        console.warn('Ingredient fetch failed', ing.name)
-      }
+    let multiplier = 1
+      if (nutri.unit === "g") {
+      // values are per 100g
+      multiplier = ing.grams / 100
+    } else if (nutri.unit === "item") {
+      // values are per item
+      multiplier = ing.grams // here "grams" field actually means "count of items"
     }
+
+    
+    total.calories += nutri.calories * multiplier
+    total.protein += nutri.protein * multiplier
+    total.carbs += nutri.carbs * multiplier
+    total.fat += nutri.fat * multiplier
+      }
+    
 
     onSave({ name, ingredients, total })
   }
@@ -77,7 +80,7 @@ function RecipeForm({ onSave, initialData }) {
           value={grams}
           type="number"
           onChange={(e) => setGrams(e.target.value)}
-          placeholder="Grams"
+          placeholder={selectedIngredient?.unit === "item" ? "Count" : "Grams"}
         />
         <button
           className="bg-blue-500 text-white px-4 py-2 rounded"

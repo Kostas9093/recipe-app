@@ -1,28 +1,32 @@
 import React, { useState } from 'react'
+import { NUTRITION_DB } from './NutritionDB'
 
 function IngredientSearch({ onSelect }) {
   const [query, setQuery] = useState('')
   const [results, setResults] = useState([])
   const [selectedProduct, setSelectedProduct] = useState(null)
 
-  const search = async (q) => {
+  const search = (q) => {
     setQuery(q)
     setSelectedProduct(null) // reset selection
     if (q.length < 3) {
       setResults([])
       return
     }
+      // simple case-insensitive search
+    const matches = Object.keys(NUTRITION_DB).filter(item =>
+      item.toLowerCase().includes(q.toLowerCase())
+    )
 
-    const res = await fetch(`https://world.openfoodfacts.org/cgi/search.pl?search_terms=${q}&search_simple=1&action=process&json=1`)
-    const data = await res.json()
-    setResults(data.products.slice(0, 10))
+    setResults(matches.slice(0, 10))
   }
+   
+  
 
-   const handleSelect = (product) => {
-    setSelectedProduct(product)
-    setQuery(product.product_name)
+    const handleSelect = (name) => {
+    setQuery(name)
     setResults([])
-    onSelect({ name: product.product_name, id: product.code }) // tell parent
+    onSelect({ name }) // just send the name back
   }
   return (
     <div className="relative">
@@ -34,13 +38,13 @@ function IngredientSearch({ onSelect }) {
       />
       {results.length > 0 && (
         <ul className="absolute z-10 bg-white border w-full max-h-48 overflow-y-auto">
-          {results.map((item) => (
+          {results.map((name, idx) => (
             <li
-              key={item.code}
+              key={idx}
               className="p-2 hover:bg-gray-200 cursor-pointer"
-              onClick={() => handleSelect(item)}
+              onClick={() => handleSelect(name)}
             >
-              {item.product_name}
+              {name}
             </li>
           ))}
         </ul>
